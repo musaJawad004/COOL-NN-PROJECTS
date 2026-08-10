@@ -49,6 +49,13 @@ For useful results, vary sentences, speaking volume, and distance from the
 microphone. The model learns acoustic patterns from your data; it cannot reliably
 recognize speakers or emotions it has never encountered.
 
+## Included demo audio
+
+Ten generated WAV files per emotion are included so training works immediately.
+They contain distinct synthetic tone patterns, not real emotional speech. Use
+them to verify the pipeline, then add genuine labeled recordings for meaningful
+predictions. Recreate them with `python3 scripts/generate_demo_audio.py`.
+
 ## Tests
 
 ```bash
