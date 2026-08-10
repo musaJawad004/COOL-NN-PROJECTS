@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 from datetime import datetime
+import json
+import os
 from pathlib import Path
 import queue
+import subprocess
+import sys
 import threading
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
@@ -14,7 +18,7 @@ import sounddevice as sd
 
 from emotion_ai.audio import DURATION_SECONDS, EMOTIONS, SAMPLE_COUNT, SAMPLE_RATE, audio_to_spectrogram, load_wav, save_wav
 from emotion_ai.model import EmotionCNN
-from emotion_ai.training import dataset_files, predict, train_model, training_dataset_files
+from emotion_ai.training import dataset_files, predict, training_dataset_files
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -33,8 +37,10 @@ class EmotionApp(tk.Tk):
         self.current_audio: np.ndarray | None = None
         self.model: EmotionCNN | None = None
         self.events: queue.Queue[tuple] = queue.Queue()
+        self.training_process: subprocess.Popen | None = None
         self.emotion = tk.StringVar(value="happy")
         self._build_ui()
+        self.protocol("WM_DELETE_WINDOW", self._on_close)
         self._load_checkpoint_if_present()
         self._update_dataset_counts()
         self.after(80, self._poll_events)
@@ -149,20 +155,82 @@ class EmotionApp(tk.Tk):
         self.status.configure(text="SAMPLE IMPORTED", fg="#70e5aa")
 
     def train(self) -> None:
+        if self.training_process is not None and self.training_process.poll() is None:
+            return
         self.train_button.configure(state="disabled")
         self.status.configure(text="TRAINING", fg="#c490ff")
         self.training_label.configure(text="Preparing spectrograms…")
 
-        def progress(epoch: int, loss: float, training_accuracy: float, validation_accuracy: float) -> None:
-            self.events.put(("progress", epoch, loss, training_accuracy, validation_accuracy))
+        environment = os.environ.copy()
+        environment.update(
+            {
+                "OMP_NUM_THREADS": "2",
+                "MKL_NUM_THREADS": "2",
+                "VECLIB_MAXIMUM_THREADS": "2",
+            }
+        )
+        command = [
+            sys.executable,
+            "-m",
+            "emotion_ai.train_worker",
+            "--data",
+            str(DATA_ROOT),
+            "--checkpoint",
+            str(CHECKPOINT),
+            "--epochs",
+            "35",
+        ]
+        try:
+            self.training_process = subprocess.Popen(
+                command,
+                cwd=ROOT,
+                env=environment,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                bufsize=1,
+                start_new_session=True,
+            )
+        except Exception as error:
+            self.train_button.configure(state="normal")
+            messagebox.showerror("Training could not start", str(error))
+            return
 
-        def worker() -> None:
+        def read_worker() -> None:
+            assert self.training_process is not None
+            process = self.training_process
             try:
-                model, metadata = train_model(DATA_ROOT, CHECKPOINT, progress=progress)
-                self.events.put(("trained", model, metadata))
+                assert process.stdout is not None
+                for line in process.stdout:
+                    try:
+                        payload = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    kind = payload.get("event")
+                    if kind == "progress":
+                        self.events.put(
+                            (
+                                "progress",
+                                payload["epoch"],
+                                payload["loss"],
+                                payload["training_accuracy"],
+                                payload["validation_accuracy"],
+                            )
+                        )
+                    elif kind == "trained":
+                        self.events.put(("trained", payload["metadata"]))
+                    elif kind == "error":
+                        self.events.put(("error", payload["message"]))
+                return_code = process.wait()
+                if return_code != 0:
+                    assert process.stderr is not None
+                    details = process.stderr.read().strip()
+                    if details:
+                        self.events.put(("error", details.splitlines()[-1]))
             except Exception as error:
-                self.events.put(("error", str(error)))
-        threading.Thread(target=worker, daemon=True).start()
+                self.events.put(("error", f"Training worker failed: {error}"))
+
+        threading.Thread(target=read_worker, daemon=True).start()
 
     def analyze(self) -> None:
         if self.current_audio is None:
@@ -208,8 +276,9 @@ class EmotionApp(tk.Tk):
                         )
                     )
                 elif kind == "trained":
-                    self.model = event[1]
-                    metadata = event[2]
+                    metadata = event[1]
+                    self.model, _ = EmotionCNN.load(CHECKPOINT)
+                    self.training_process = None
                     self.train_button.configure(state="normal")
                     self.training_label.configure(
                         text=(
@@ -219,6 +288,7 @@ class EmotionApp(tk.Tk):
                     )
                     self.status.configure(text="MODEL READY", fg="#70e5aa")
                 else:
+                    self.training_process = None
                     self.record_button.configure(state="normal")
                     self.test_record_button.configure(state="normal")
                     self.train_button.configure(state="normal")
@@ -227,6 +297,12 @@ class EmotionApp(tk.Tk):
         except queue.Empty:
             pass
         self.after(80, self._poll_events)
+
+    def _on_close(self) -> None:
+        process = self.training_process
+        if process is not None and process.poll() is None:
+            process.terminate()
+        self.destroy()
 
     def _draw_audio(self) -> None:
         assert self.current_audio is not None
