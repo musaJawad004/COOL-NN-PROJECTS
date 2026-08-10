@@ -51,13 +51,27 @@ def train_model(
     torch.manual_seed(42)
     training_items = []
     validation_items = []
+    personal_sample_count = 0
     for emotion, paths in files.items():
         label = EMOTIONS.index(emotion)
-        shuffled = list(paths)
-        rng.shuffle(shuffled)
-        validation_count = max(1, round(len(shuffled) * 0.2))
-        validation_items.extend((path, label) for path in shuffled[:validation_count])
-        training_items.extend((path, label) for path in shuffled[validation_count:])
+        if data_source == "demo audio":
+            shuffled = list(paths)
+            rng.shuffle(shuffled)
+            validation_count = max(1, round(len(shuffled) * 0.2))
+            validation_items.extend((path, label) for path in shuffled[:validation_count])
+            training_items.extend((path, label) for path in shuffled[validation_count:])
+            continue
+        public = [path for path in paths if path.name.startswith("ravdess_")]
+        personal = [path for path in paths if not path.name.startswith(("ravdess_", "demo_"))]
+        rng.shuffle(public)
+        validation_count = max(1, round(len(public) * 0.2))
+        validation_items.extend((path, label) for path in public[:validation_count])
+        training_items.extend((path, label) for path in public[validation_count:])
+        # Personal microphone samples are the most valuable domain adaptation
+        # data. Keep all of them in training and repeat them without duplicating files.
+        personal_sample_count += len(personal)
+        for path in personal:
+            training_items.extend([(path, label)] * 5)
     model = EmotionCNN()
     optimizer = torch.optim.AdamW(model.parameters(), lr=0.0015, weight_decay=0.0001)
     class_counts = np.bincount([label for _, label in training_items], minlength=len(EMOTIONS))
@@ -69,6 +83,7 @@ def train_model(
         (audio_to_spectrogram(load_wav(path)), label)
         for path, label in validation_items
     ]
+    audio_cache = {path: load_wav(path) for path, _ in training_items}
 
     for epoch in range(1, epochs + 1):
         model.train()
@@ -76,11 +91,18 @@ def train_model(
         losses = []
         correct = 0
         total = 0
+        epoch_features = []
+        epoch_labels = []
         for path, label in training_items:
-            audio = load_wav(path)
+            audio = audio_cache[path]
             versions = (audio, augment_audio(audio, rng))
-            features = torch.stack([audio_to_spectrogram(version) for version in versions])
-            labels = torch.tensor([label, label], dtype=torch.long)
+            epoch_features.extend(audio_to_spectrogram(version) for version in versions)
+            epoch_labels.extend((label, label))
+        order = rng.permutation(len(epoch_labels))
+        for start in range(0, len(order), 32):
+            indices = order[start : start + 32]
+            features = torch.stack([epoch_features[int(index)] for index in indices])
+            labels = torch.tensor([epoch_labels[int(index)] for index in indices], dtype=torch.long)
             optimizer.zero_grad(set_to_none=True)
             logits = model(features)
             loss = criterion(logits, labels)
@@ -107,6 +129,23 @@ def train_model(
 
     assert best_state is not None
     model.load_state_dict(best_state)
+    model.eval()
+    validation_logits = []
+    validation_labels = []
+    with torch.inference_mode():
+        for feature, label in validation_features:
+            validation_logits.append(model(feature.unsqueeze(0)).squeeze(0))
+            validation_labels.append(label)
+    stacked_logits = torch.stack(validation_logits)
+    stacked_labels = torch.tensor(validation_labels, dtype=torch.long)
+    # Simple held-out temperature scaling prevents overconfident 100% outputs.
+    candidates = torch.linspace(0.75, 5.0, 86)
+    losses = [
+        float(nn.functional.cross_entropy(stacked_logits / candidate, stacked_labels).item())
+        for candidate in candidates
+    ]
+    temperature = float(candidates[int(np.argmin(losses))].item())
+    model.temperature = temperature
     metadata = {
         "epochs": epochs,
         "validation_accuracy": best_accuracy,
@@ -114,6 +153,8 @@ def train_model(
         "training_samples": len(training_items),
         "validation_samples": len(validation_items),
         "data_source": data_source,
+        "personal_samples": personal_sample_count,
+        "temperature": temperature,
     }
     model.save(checkpoint, metadata)
     model.eval()
@@ -123,5 +164,6 @@ def train_model(
 @torch.inference_mode()
 def predict(model: EmotionCNN, audio: np.ndarray) -> dict[str, float]:
     feature = audio_to_spectrogram(audio).unsqueeze(0)
-    probabilities = torch.softmax(model(feature), dim=1).squeeze(0)
+    temperature = max(float(getattr(model, "temperature", 1.0)), 0.1)
+    probabilities = torch.softmax(model(feature) / temperature, dim=1).squeeze(0)
     return {emotion: float(probabilities[index]) for index, emotion in enumerate(EMOTIONS)}

@@ -34,6 +34,7 @@ class EmotionCNN(nn.Module):
             nn.Dropout(0.3),
             nn.Linear(128, class_count),
         )
+        self.temperature = 1.0
 
     def forward(self, features: torch.Tensor) -> torch.Tensor:
         return self.classifier(self.features(features))
@@ -49,5 +50,6 @@ class EmotionCNN(nn.Module):
             raise ValueError("Checkpoint emotion labels do not match this application.")
         model = cls()
         model.load_state_dict(payload["model_state"])
+        model.temperature = float(payload.get("metadata", {}).get("temperature", 1.0))
         model.eval()
         return model, payload.get("metadata", {})

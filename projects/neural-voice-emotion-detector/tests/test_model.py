@@ -20,6 +20,14 @@ class ModelTests(unittest.TestCase):
         probabilities = predict(EmotionCNN().eval(), np.zeros(SAMPLE_COUNT, dtype=np.float32))
         self.assertAlmostEqual(sum(probabilities.values()), 1.0, places=5)
 
+    def test_temperature_reduces_overconfidence(self):
+        model = EmotionCNN().eval()
+        audio = np.zeros(SAMPLE_COUNT, dtype=np.float32)
+        original = max(predict(model, audio).values())
+        model.temperature = 5.0
+        calibrated = max(predict(model, audio).values())
+        self.assertLessEqual(calibrated, original)
+
     def test_checkpoint_round_trip(self):
         model = EmotionCNN()
         with tempfile.TemporaryDirectory() as directory:

@@ -56,11 +56,15 @@ They contain distinct synthetic tone patterns, not real emotional speech. Use
 them to verify the pipeline, then add genuine labeled recordings for meaningful
 predictions. Recreate them with `python3 scripts/generate_demo_audio.py`.
 
-A balanced 50-file human-speech subset of RAVDESS is also included: ten samples
-per label. When at least two genuine speech files exist for every emotion, the
+A balanced multi-speaker human-speech subset of RAVDESS is also included, with
+24 actors and two performances per label. When at least two genuine speech files exist for every emotion, the
 trainer automatically excludes synthetic tones and trains only on speech. See
 `data/RAVDESS_ATTRIBUTION.md` for the required attribution and non-commercial
 ShareAlike license terms.
+
+Personal microphone recordings are repeated during training to adapt the public
+speech model to your microphone and voice. Held-out temperature calibration
+prevents unfamiliar speech from receiving a misleading 100% confidence score.
 
 ## Tests
 

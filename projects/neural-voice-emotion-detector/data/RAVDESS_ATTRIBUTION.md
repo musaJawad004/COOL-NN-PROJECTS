@@ -1,8 +1,8 @@
 # RAVDESS subset attribution
 
-This project includes a 50-file educational subset of the **Ryerson Audio-Visual
-Database of Emotional Speech and Song (RAVDESS)**: ten speech recordings for
-each of calm, happy, sad, angry, and fearful. The application maps the RAVDESS
+This project includes an educational subset of the **Ryerson Audio-Visual
+Database of Emotional Speech and Song (RAVDESS)** covering 24 actors and two
+performances per category for calm, happy, sad, angry, and fearful. The application maps the RAVDESS
 `fearful` category to its `nervous` label.
 
 Original dataset:

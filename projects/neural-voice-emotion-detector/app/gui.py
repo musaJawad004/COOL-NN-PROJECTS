@@ -172,8 +172,17 @@ class EmotionApp(tk.Tk):
             messagebox.showinfo("No trained model", "Record labeled samples and train the neural network first.")
             return
         probabilities = predict(self.model, self.current_audio)
-        winner = max(probabilities, key=probabilities.get)
-        self.prediction_title.configure(text=f"{winner.title()} · {probabilities[winner]:.1%}", fg=COLORS[winner])
+        ranked = sorted(probabilities, key=probabilities.get, reverse=True)
+        winner, runner_up = ranked[:2]
+        confidence = probabilities[winner]
+        margin = confidence - probabilities[runner_up]
+        if confidence < 0.48 or margin < 0.12:
+            title = f"Uncertain · leaning {winner.title()} {confidence:.1%}"
+            color = "#ffd479"
+        else:
+            title = f"{winner.title()} · {confidence:.1%}"
+            color = COLORS[winner]
+        self.prediction_title.configure(text=title, fg=color)
         self._draw_confidences(probabilities)
         self.status.configure(text="ANALYSIS COMPLETE", fg="#70e5aa")
 
