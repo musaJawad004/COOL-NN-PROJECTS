@@ -14,6 +14,7 @@ network to classify **happy**, **sad**, **angry**, **calm**, and **nervous** spe
 - Confidence bars for all five emotions
 - Dataset counts and training progress
 - Save/load best model checkpoint
+- Crash-isolated training subprocess with controlled CPU threads
 - WAV import for existing recordings
 - Entirely local processing
 
@@ -65,6 +66,10 @@ ShareAlike license terms.
 Personal microphone recordings are repeated during training to adapt the public
 speech model to your microphone and voice. Held-out temperature calibration
 prevents unfamiliar speech from receiving a misleading 100% confidence score.
+
+Training runs in a separate Python process. This prevents macOS Tk shutdown from
+racing PyTorch/OpenMP native worker cleanup, and keeps the desktop interface alive
+if a training process fails.
 
 ## Tests
 

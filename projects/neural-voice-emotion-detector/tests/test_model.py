@@ -4,6 +4,8 @@ from pathlib import Path
 
 import numpy as np
 import torch
+import subprocess
+import sys
 
 from emotion_ai.audio import SAMPLE_COUNT
 from emotion_ai.model import EmotionCNN
@@ -27,6 +29,15 @@ class ModelTests(unittest.TestCase):
         model.temperature = 5.0
         calibrated = max(predict(model, audio).values())
         self.assertLessEqual(calibrated, original)
+
+    def test_training_worker_has_json_helpful_interface(self):
+        result = subprocess.run(
+            [sys.executable, "-m", "emotion_ai.train_worker", "--help"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        self.assertIn("--checkpoint", result.stdout)
 
     def test_checkpoint_round_trip(self):
         model = EmotionCNN()
