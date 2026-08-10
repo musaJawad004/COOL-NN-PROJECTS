@@ -1,0 +1,40 @@
+import tempfile
+import unittest
+from pathlib import Path
+
+import numpy as np
+import torch
+
+from emotion_ai.audio import SAMPLE_COUNT
+from emotion_ai.model import EmotionCNN
+from emotion_ai.training import predict, validate_dataset
+
+
+class ModelTests(unittest.TestCase):
+    def test_forward_shape(self):
+        model = EmotionCNN()
+        output = model(torch.zeros(2, 1, 64, 128))
+        self.assertEqual(tuple(output.shape), (2, 5))
+
+    def test_prediction_probabilities_sum_to_one(self):
+        probabilities = predict(EmotionCNN().eval(), np.zeros(SAMPLE_COUNT, dtype=np.float32))
+        self.assertAlmostEqual(sum(probabilities.values()), 1.0, places=5)
+
+    def test_checkpoint_round_trip(self):
+        model = EmotionCNN()
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "model.pt"
+            model.save(path, {"sample_count": 10})
+            restored, metadata = EmotionCNN.load(path)
+            self.assertIsInstance(restored, EmotionCNN)
+            self.assertEqual(metadata["sample_count"], 10)
+
+    def test_training_requires_every_emotion(self):
+        incomplete = {emotion: [] for emotion in ("happy", "sad", "angry", "calm", "nervous")}
+        incomplete["happy"] = [Path("one.wav"), Path("two.wav")]
+        with self.assertRaisesRegex(ValueError, "every emotion"):
+            validate_dataset(incomplete)
+
+
+if __name__ == "__main__":
+    unittest.main()
