@@ -1,0 +1,22 @@
+[
+  {"input": "hfdshfsid fhdisafhiosdh", "output": "this is the first proper phrase."},
+  {"input": "ugiye difhdsb vzj", "output": "this is the second proper phrase."},
+  {"input": "ifhdsifhidfhisdfh", "output": "this is the third proper phrase."},
+  {"input": "how aer yuo", "output": "how are you?"},
+  {"input": "helo how are yuo", "output": "hello, how are you?"},
+  {"input": "whta is yuor name", "output": "what is your name?"},
+  {"input": "i wnat to lern", "output": "i want to learn."},
+  {"input": "pleae opne the dor", "output": "please open the door."},
+  {"input": "the wether is ncie", "output": "the weather is nice."},
+  {"input": "ths is a tset", "output": "this is a test."},
+  {"input": "can yuo hlpe me", "output": "can you help me?"},
+  {"input": "i lkie tihs porject", "output": "i like this project."},
+  {"input": "we wil bulid an ai", "output": "we will build an ai."},
+  {"input": "godo mornign", "output": "good morning."},
+  {"input": "see yuo tomorow", "output": "see you tomorrow."},
+  {"input": "thnak yuo very mcuh", "output": "thank you very much."},
+  {"input": "wher is the trian", "output": "where is the train?"},
+  {"input": "i ned more tiem", "output": "i need more time."},
+  {"input": "lets satrt now", "output": "let's start now."},
+  {"input": "the modle is traning", "output": "the model is training."}
+]
