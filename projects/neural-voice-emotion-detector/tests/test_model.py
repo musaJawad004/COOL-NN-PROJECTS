@@ -7,7 +7,7 @@ import torch
 
 from emotion_ai.audio import SAMPLE_COUNT
 from emotion_ai.model import EmotionCNN
-from emotion_ai.training import predict, validate_dataset
+from emotion_ai.training import predict, training_dataset_files, validate_dataset
 
 
 class ModelTests(unittest.TestCase):
@@ -34,6 +34,18 @@ class ModelTests(unittest.TestCase):
         incomplete["happy"] = [Path("one.wav"), Path("two.wav")]
         with self.assertRaisesRegex(ValueError, "every emotion"):
             validate_dataset(incomplete)
+
+    def test_real_speech_replaces_demo_tones_when_balanced(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for emotion in ("happy", "sad", "angry", "calm", "nervous"):
+                folder = root / emotion
+                folder.mkdir()
+                for name in ("demo_01.wav", "real_01.wav", "real_02.wav"):
+                    (folder / name).touch()
+            files, source = training_dataset_files(root)
+            self.assertEqual(source, "human speech")
+            self.assertTrue(all(len(paths) == 2 for paths in files.values()))
 
 
 if __name__ == "__main__":

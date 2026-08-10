@@ -30,9 +30,18 @@ def normalize_audio(audio: np.ndarray) -> np.ndarray:
     audio = audio - float(audio.mean())
     peak = float(np.max(np.abs(audio)))
     if peak > 1e-6:
+        active = np.flatnonzero(np.abs(audio) >= max(peak * 0.035, 1e-4))
+        if active.size:
+            padding = int(SAMPLE_RATE * 0.12)
+            start = max(0, int(active[0]) - padding)
+            end = min(len(audio), int(active[-1]) + padding + 1)
+            audio = audio[start:end]
+            peak = float(np.max(np.abs(audio)))
+    if peak > 1e-6:
         audio = audio / peak
     if len(audio) < SAMPLE_COUNT:
-        audio = np.pad(audio, (0, SAMPLE_COUNT - len(audio)))
+        missing = SAMPLE_COUNT - len(audio)
+        audio = np.pad(audio, (missing // 2, missing - missing // 2))
     else:
         audio = audio[:SAMPLE_COUNT]
     return audio.astype(np.float32)

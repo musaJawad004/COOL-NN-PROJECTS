@@ -14,7 +14,7 @@ import sounddevice as sd
 
 from emotion_ai.audio import DURATION_SECONDS, EMOTIONS, SAMPLE_COUNT, SAMPLE_RATE, audio_to_spectrogram, load_wav, save_wav
 from emotion_ai.model import EmotionCNN
-from emotion_ai.training import dataset_files, predict, train_model
+from emotion_ai.training import dataset_files, predict, train_model, training_dataset_files
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -153,8 +153,8 @@ class EmotionApp(tk.Tk):
         self.status.configure(text="TRAINING", fg="#c490ff")
         self.training_label.configure(text="Preparing spectrograms…")
 
-        def progress(epoch: int, loss: float, accuracy: float) -> None:
-            self.events.put(("progress", epoch, loss, accuracy))
+        def progress(epoch: int, loss: float, training_accuracy: float, validation_accuracy: float) -> None:
+            self.events.put(("progress", epoch, loss, training_accuracy, validation_accuracy))
 
         def worker() -> None:
             try:
@@ -191,13 +191,23 @@ class EmotionApp(tk.Tk):
                     self._draw_audio()
                     self._update_dataset_counts()
                 elif kind == "progress":
-                    _, epoch, loss, accuracy = event
-                    self.training_label.configure(text=f"Epoch {epoch:>2}/35   loss {loss:.4f}   training accuracy {accuracy:.1%}")
+                    _, epoch, loss, training_accuracy, validation_accuracy = event
+                    self.training_label.configure(
+                        text=(
+                            f"Epoch {epoch:>2}/35   loss {loss:.4f}\n"
+                            f"training {training_accuracy:.1%}   validation {validation_accuracy:.1%}"
+                        )
+                    )
                 elif kind == "trained":
                     self.model = event[1]
                     metadata = event[2]
                     self.train_button.configure(state="normal")
-                    self.training_label.configure(text=f"Model ready · {metadata['sample_count']} samples · best training accuracy {metadata['training_accuracy']:.1%}")
+                    self.training_label.configure(
+                        text=(
+                            f"Model ready · {metadata['sample_count']} {metadata['data_source']} samples\n"
+                            f"best held-out validation accuracy {metadata['validation_accuracy']:.1%}"
+                        )
+                    )
                     self.status.configure(text="MODEL READY", fg="#70e5aa")
                 else:
                     self.record_button.configure(state="normal")
@@ -257,7 +267,12 @@ class EmotionApp(tk.Tk):
 
     def _update_dataset_counts(self) -> None:
         files = dataset_files(DATA_ROOT)
-        lines = [f"{emotion:<9} {len(files[emotion]):>3} samples" for emotion in EMOTIONS]
+        training_files, source = training_dataset_files(DATA_ROOT)
+        lines = [
+            f"{emotion:<9} {len(files[emotion]):>3} total · {len(training_files[emotion]):>2} training"
+            for emotion in EMOTIONS
+        ]
+        lines.append(f"\nActive source: {source}")
         self.dataset_label.configure(text="\n".join(lines))
 
     def _load_checkpoint_if_present(self) -> None:
@@ -265,7 +280,9 @@ class EmotionApp(tk.Tk):
             return
         try:
             self.model, metadata = EmotionCNN.load(CHECKPOINT)
-            self.training_label.configure(text=f"Saved model loaded · {metadata.get('sample_count', '?')} samples")
+            accuracy = metadata.get("validation_accuracy")
+            suffix = f" · validation {accuracy:.1%}" if isinstance(accuracy, float) else ""
+            self.training_label.configure(text=f"Saved model loaded · {metadata.get('sample_count', '?')} samples{suffix}")
             self.status.configure(text="MODEL LOADED", fg="#70e5aa")
         except Exception:
             self.model = None

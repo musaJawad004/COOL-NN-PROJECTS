@@ -28,3 +28,7 @@ Open an individual project directory and follow its README to run it.
 These applications are educational demonstrations. The emotion detector is not
 a medical or psychological assessment, and synthetic demo audio does not
 represent genuine human emotional speech.
+
+The voice project also contains an attributed educational subset of RAVDESS,
+licensed separately under CC BY-NC-SA 4.0. See that project's
+`data/RAVDESS_ATTRIBUTION.md` before redistributing or using it commercially.
